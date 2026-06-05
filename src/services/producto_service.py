@@ -77,24 +77,38 @@ class ProductoService:
 
     @staticmethod
     def addStock(productId, quantity, unitPurchasePrice, supplierId):
-
+        """Transacción para entrada de inventario (compra a proveedor)."""
         conn = dbInstance.connect()
         cur = conn.cursor()
         try:
-            conn.autocommit = False  # Iniciar transacción
-            # 1. Incrementar stock del producto
-            cur.execute("""
-                UPDATE Productos 
-                SET cantidad_producto = cantidad_producto + %s 
-                WHERE id_producto = %s
-            """, (quantity, productId))
+            conn.autocommit = False
 
-            # 2. Registrar orden de compra en tabla Ordenes
+            # 1. Bloquear producto y leer stock actual
+            cur.execute("SELECT cantidad_producto FROM Productos WHERE id_producto = %s FOR UPDATE", (productId,))
+            row = cur.fetchone()
+            if not row:
+                raise Exception("Producto no encontrado")
+            currentStock = row[0]
+
+            # 2. Aumentar stock
+            newStock = currentStock + quantity
+            cur.execute("UPDATE Productos SET cantidad_producto = %s WHERE id_producto = %s", (newStock, productId))
+
+            # 3. Generar nuevo ID para la orden de compra
+            cur.execute("SELECT COALESCE(MAX(id_orden), 0) + 1 FROM Ordenes")
+            newOrderId = cur.fetchone()[0]
+
             totalPrice = unitPurchasePrice * quantity
             cur.execute("""
-                INSERT INTO Ordenes (fecha, precio, cantidad_compra, id_proveedor, id_producto)
-                VALUES (NOW(), %s, %s, %s, %s)
-            """, (totalPrice, quantity, supplierId, productId))
+                INSERT INTO Ordenes (id_orden, fecha, precio, cantidad_compra, id_proveedor, id_producto)
+                VALUES (%s, NOW(), %s, %s, %s, %s)
+            """, (newOrderId, totalPrice, quantity, supplierId, productId))
+
+            # 4. Registrar movimiento de inventario (entrada)
+            cur.execute("""
+                INSERT INTO MovimientoInventario (producto_id, tipo, cantidad, referencia)
+                VALUES (%s, 'entrada', %s, %s)
+            """, (productId, quantity, f"Compra #{newOrderId}"))
 
             conn.commit()
             print(f"✅ Entrada registrada: +{quantity} unidades de producto {productId}")
@@ -105,5 +119,27 @@ class ProductoService:
             return False
         finally:
             conn.autocommit = True
+            cur.close()
+        dbInstance.disconnect(conn)
+
+    @staticmethod
+    def getMovimientosProducto(productId, limite=50):
+        """
+        Retorna los últimos movimientos de un producto específico.
+        """
+        conn = dbInstance.connect()
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                SELECT m.id_movimiento, m.tipo, m.cantidad, m.referencia, m.fecha, m.usuario,
+                    p.tipo AS producto_nombre
+                FROM MovimientoInventario m
+                JOIN Productos p ON m.producto_id = p.id_producto
+                WHERE m.producto_id = %s
+                ORDER BY m.fecha DESC
+                LIMIT %s
+            """, (productId, limite))
+            return cur.fetchall()
+        finally:
             cur.close()
             dbInstance.disconnect(conn)

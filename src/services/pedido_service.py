@@ -13,16 +13,15 @@ class PedidoService:
     def createOrder(customerId, productId, quantity, color=None, size=None, customName=None):
         """
         Crea un nuevo pedido para un cliente.
-        Es una transacción: inserta en Pedido y actualiza stock de Productos.
+        Transacción: inserta Pedido, actualiza stock, registra movimiento de salida.
         Retorna el ID del pedido y el total, o None en caso de error.
         """
         conn = dbInstance.connect()
         cur = conn.cursor()
         try:
-            # Iniciar transacción
             conn.autocommit = False
 
-            # 1. Obtener detalles del producto y verificar stock
+            # 1. Bloquear producto y leer stock + precio
             cur.execute("""
                 SELECT cantidad_producto, precio_unitario
                 FROM Productos
@@ -36,24 +35,24 @@ class PedidoService:
             if currentStock < quantity:
                 raise Exception(f"Stock insuficiente. Disponible: {currentStock}")
 
-            # 2. Calcular precio total
             totalPrice = unitPrice * quantity
 
-            # 3. Insertar en la tabla Pedido (generar id_pedido manualmente)
+            # 2. Generar nuevo id_pedido
             cur.execute("SELECT COALESCE(MAX(id_pedido), 0) + 1 FROM Pedido")
             newOrderId = cur.fetchone()[0]
 
+            # 3. Insertar pedido
             cur.execute("""
-                INSERT INTO Pedido (id_pedido, nombre, descripcion, precio, color, tamano, id_inventario)
-                VALUES (%s, %s, %s, %s, %s, %s, NULL)
+                INSERT INTO Pedido (id_pedido, nombre, descripcion, precio, color, tamano, id_inventario, fecha)
+                VALUES (%s, %s, %s, %s, %s, %s, NULL, NOW())
             """, (newOrderId, customName or f"Pedido {newOrderId}", f"Pedido del producto {productId}", totalPrice, color, size))
 
-            # 4. Actualizar stock del producto
+            # 4. Actualizar stock
             newStock = currentStock - quantity
             cur.execute("UPDATE Productos SET cantidad_producto = %s WHERE id_producto = %s",
                         (newStock, productId))
 
-            # 5. Registrar en Tienda (tabla puente)
+            # 5. Registrar en Tienda (puente)
             cur.execute("""
                 INSERT INTO Tienda (id_pedido, id_cliente, destino, id_inventario)
                 VALUES (%s, %s, %s, NULL)
@@ -65,7 +64,12 @@ class PedidoService:
             cur.execute("INSERT INTO Historial_venta (id_venta, id_pedido) VALUES (%s, %s)",
                         (newSaleId, newOrderId))
 
-            # 7. Confirmar transacción
+            # 7. Registrar movimiento de inventario (salida)
+            cur.execute("""
+                INSERT INTO MovimientoInventario (producto_id, tipo, cantidad, referencia)
+                VALUES (%s, 'salida', %s, %s)
+            """, (productId, quantity, f"Pedido #{newOrderId}"))
+
             conn.commit()
             print(f"✅ Pedido #{newOrderId} creado exitosamente. Total: ${totalPrice:.2f}")
             return {'orderId': newOrderId, 'total': totalPrice}
@@ -79,7 +83,6 @@ class PedidoService:
             cur.close()
             dbInstance.disconnect(conn)
 
-        
     @staticmethod
     def getAllOrders():
         """Retorna lista de todos los pedidos con nombre del cliente."""
@@ -97,13 +100,13 @@ class PedidoService:
         finally:
             cur.close()
             dbInstance.disconnect(conn)
+
     @staticmethod
     def getOrderDetails(orderId):
         """Retorna detalles completos de un pedido específico."""
         conn = dbInstance.connect()
         cur = conn.cursor()
         try:
-            # Cabecera del pedido
             cur.execute("""
                 SELECT p.id_pedido, p.nombre, p.descripcion, p.precio, p.color, p.tamano, p.fecha,
                        c.nombre AS cliente

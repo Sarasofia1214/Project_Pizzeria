@@ -5,20 +5,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.services.cliente_service import ClienteService
 from src.services.producto_service import ProductoService
 from src.services.pedido_service import PedidoService
+from src.services.proveedor_service import ProveedorService
 from src.config.database import dbInstance
 
 def mainMenu():
-    """Muestra el menú principal en español."""
-    print("\n" + "="*50)
-    print("🚲 CAMPUSBIKE - SISTEMA DE GESTIÓN")
-    print("="*50)
-    print("1. 👥 Clientes")
-    print("2. 🚲 Productos")
-    print("3. 📦 Pedidos")
-    print("0. 🚪 Salir")
+    print("\n🚲 CAMPUSBIKE - SISTEMA DE GESTIÓN")
+    print("1. Clientes")
+    print("2. Productos")
+    print("3. Pedidos")
+    print("4. Reportes")
+    print("5. Proveedores")
+    print("0. Salir")
 
 def customerMenu():
-    """Submenú de gestión de clientes."""
     while True:
         print("\n--- CLIENTES ---")
         print("1. Crear cliente")
@@ -76,7 +75,7 @@ def productMenu():
         print("1. Listar productos")
         print("2. Actualizar precio de producto")
         print("3. Actualizar stock de producto")
-        print("4. Registrar entrada de stock (compra)")  
+        print("4. Registrar entrada de stock (compra)")
         print("0. Volver")
         opt = input("Opción: ")
 
@@ -94,7 +93,7 @@ def productMenu():
                 pid = int(input("ID del producto: "))
                 newPrice = float(input("Nuevo precio: "))
                 if ProductoService.updateProductPrice(pid, newPrice):
-                    pass
+                    print("✅ Precio actualizado.")
                 else:
                     print("❌ Producto no encontrado.")
             except ValueError:
@@ -111,6 +110,15 @@ def productMenu():
                 print("❌ Error: Debe ingresar un número entero para ID y cantidad de stock.")
         elif opt == '4':
             try:
+                # Mostrar proveedores disponibles antes de pedir el ID
+                proveedores = ProveedorService.getAllProveedores()
+                if not proveedores:
+                    print("⚠️ No hay proveedores registrados. No se puede registrar entrada.")
+                    continue
+                print("\nProveedores disponibles:")
+                for prov in proveedores:
+                    print(f"ID: {prov[0]} - {prov[1]}")
+                
                 pid = int(input("ID del producto: "))
                 cantidad = int(input("Cantidad que llega: "))
                 precioCompra = float(input("Precio de compra unitario: "))
@@ -122,7 +130,6 @@ def productMenu():
             break
 
 def orderMenu():
-    """Submenú de gestión de pedidos (incluye transacción)."""
     while True:
         print("\n--- PEDIDOS ---")
         print("1. Crear nuevo pedido")
@@ -132,17 +139,15 @@ def orderMenu():
         opt = input("Opción: ")
 
         if opt == '1':
-            # Mostrar clientes
             customers = ClienteService.getAllCustomers()
             if not customers:
-                print("❌ No hay clientes. Por favor cree un cliente primero.")
+                print("❌ No hay clientes. Cree un cliente primero.")
                 continue
             print("Clientes disponibles:")
             for c in customers:
                 print(f"ID:{c[0]} - {c[1]}")
             custId = int(input("ID del cliente: "))
 
-            # Mostrar productos
             products = ProductoService.getAllProducts()
             if not products:
                 print("❌ No hay productos disponibles.")
@@ -187,9 +192,48 @@ def orderMenu():
         elif opt == '0':
             break
 
+def reportMenu():
+    while True:
+        print("\n--- REPORTES ---")
+        print("1. Ver movimientos de inventario por producto")
+        print("0. Volver")
+        opt = input("Opción: ")
+        if opt == '1':
+            try:
+                pid = int(input("ID del producto: "))
+                movimientos = ProductoService.getMovimientosProducto(pid, 50)
+                if not movimientos:
+                    print("No hay movimientos para este producto.")
+                else:
+                    print(f"\n{'ID':<5} {'Tipo':<8} {'Cantidad':<10} {'Referencia':<30} {'Fecha':<20} {'Usuario'}")
+                    print("-"*80)
+                    for m in movimientos:
+                        print(f"{m[0]:<5} {m[1]:<8} {m[2]:<10} {m[3] or '':<30} {m[4]:<20} {m[5]}")
+            except ValueError:
+                print("ID inválido.")
+        elif opt == '0':
+            break
+
+def proveedorMenu():
+    while True:
+        print("\n--- PROVEEDORES ---")
+        print("1. Listar proveedores")
+        print("0. Volver")
+        opt = input("Opción: ")
+
+        if opt == '1':
+            proveedores = ProveedorService.getAllProveedores()
+            if not proveedores:
+                print("No hay proveedores registrados.")
+            else:
+                print(f"{'ID':<5} {'Nombre':<20} {'Dirección':<25} {'Teléfono':<15} {'Email':<25} {'País'}")
+                print("-"*90)
+                for p in proveedores:
+                    print(f"{p[0]:<5} {p[1]:<20} {p[2] or '':<25} {p[3] or '':<15} {p[4] or '':<25} {p[5] or ''}")
+        elif opt == '0':
+            break
+
 def main():
-    """Función principal: prueba conexión y lanza el menú."""
-    # Probar conexión a la base de datos
     try:
         conn = dbInstance.connect()
         dbInstance.disconnect(conn)
@@ -207,6 +251,10 @@ def main():
             productMenu()
         elif choice == '3':
             orderMenu()
+        elif choice == '4':
+            reportMenu()
+        elif choice == '5':
+            proveedorMenu()
         elif choice == '0':
             print("👋 ¡Hasta luego!")
             break

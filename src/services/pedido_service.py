@@ -79,6 +79,7 @@ class PedidoService:
             cur.close()
             dbInstance.disconnect(conn)
 
+        
     @staticmethod
     def getAllOrders():
         """Retorna lista de todos los pedidos con nombre del cliente."""
@@ -96,7 +97,6 @@ class PedidoService:
         finally:
             cur.close()
             dbInstance.disconnect(conn)
-
     @staticmethod
     def getOrderDetails(orderId):
         """Retorna detalles completos de un pedido específico."""

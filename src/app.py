@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-"""
-Aplicación principal de consola para el sistema de gestión CampusBike.
-Los textos mostrados al usuario están en español.
-Los nombres de funciones/variables permanecen en inglés.
-"""
-
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -54,37 +47,36 @@ def customerMenu():
                     print(f"{c[0]:<5} {c[1]:<20} {c[2] or '':<20} {c[3] or '':<15} ${c[4]:<10.2f}")
 
         elif opt == '3':
-            cid = int(input("ID del cliente: "))
+            customerId = int(input("ID del cliente: "))
             name = input("Nuevo nombre (vacío para omitir): ")
             address = input("Nueva dirección: ")
             phone = input("Nuevo teléfono: ")
             balance = input("Nuevo saldo: ")
             balance = float(balance) if balance else None
             ClienteService.updateCustomer(
-                cid,
+                customerId,
                 nombre=name if name else None,
                 direccion=address if address else None,
                 telefono=phone if phone else None,
                 saldoActual=balance
             )
             print("Actualización intentada (si el ID existe).")
-
         elif opt == '4':
-            cid = int(input("ID del cliente a eliminar: "))
-            if ClienteService.deleteCustomer(cid):
-                print("✅ Cliente eliminado.")
+            customerId = int(input("ID del cliente a eliminar: "))
+            if ClienteService.deleteCustomer(customerId):
+                pass
             else:
                 print("❌ No se pudo eliminar (quizás tiene pedidos asociados).")
         elif opt == '0':
             break
 
 def productMenu():
-    """Submenú de gestión de productos."""
     while True:
         print("\n--- PRODUCTOS ---")
         print("1. Listar productos")
         print("2. Actualizar precio de producto")
         print("3. Actualizar stock de producto")
+        print("4. Registrar entrada de stock (compra)")  
         print("0. Volver")
         opt = input("Opción: ")
 
@@ -98,19 +90,34 @@ def productMenu():
                 for p in products:
                     print(f"{p[0]:<5} {p[1]:<25} {p[2]:<8} ${p[3]:<10.2f} {p[4] or ''}")
         elif opt == '2':
-            pid = int(input("ID del producto: "))
-            newPrice = float(input("Nuevo precio: "))
-            if ProductoService.updateProductPrice(pid, newPrice):
-                print("✅ Precio actualizado.")
-            else:
-                print("❌ Producto no encontrado.")
+            try:
+                pid = int(input("ID del producto: "))
+                newPrice = float(input("Nuevo precio: "))
+                if ProductoService.updateProductPrice(pid, newPrice):
+                    pass
+                else:
+                    print("❌ Producto no encontrado.")
+            except ValueError:
+                print("❌ Error: Debe ingresar un número válido para ID y precio.")
         elif opt == '3':
-            pid = int(input("ID del producto: "))
-            newStock = int(input("Nueva cantidad en stock: "))
-            if ProductoService.updateProductStock(pid, newStock):
-                print("✅ Stock actualizado.")
-            else:
-                print("❌ Producto no encontrado.")
+            try:
+                pid = int(input("ID del producto: "))
+                newStock = int(input("Nueva cantidad en stock: "))
+                if ProductoService.updateProductStock(pid, newStock):
+                    print("✅ Stock actualizado.")
+                else:
+                    print("❌ Producto no encontrado.")
+            except ValueError:
+                print("❌ Error: Debe ingresar un número entero para ID y cantidad de stock.")
+        elif opt == '4':
+            try:
+                pid = int(input("ID del producto: "))
+                cantidad = int(input("Cantidad que llega: "))
+                precioCompra = float(input("Precio de compra unitario: "))
+                proveedorId = int(input("ID del proveedor: "))
+                ProductoService.addStock(pid, cantidad, precioCompra, proveedorId)
+            except ValueError:
+                print("❌ Error: debe ingresar números válidos.")
         elif opt == '0':
             break
 

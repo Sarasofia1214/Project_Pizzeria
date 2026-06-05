@@ -74,3 +74,36 @@ class ProductoService:
         finally:
             cur.close()
             dbInstance.disconnect(conn)
+
+    @staticmethod
+    def addStock(productId, quantity, unitPurchasePrice, supplierId):
+
+        conn = dbInstance.connect()
+        cur = conn.cursor()
+        try:
+            conn.autocommit = False  # Iniciar transacción
+            # 1. Incrementar stock del producto
+            cur.execute("""
+                UPDATE Productos 
+                SET cantidad_producto = cantidad_producto + %s 
+                WHERE id_producto = %s
+            """, (quantity, productId))
+
+            # 2. Registrar orden de compra en tabla Ordenes
+            totalPrice = unitPurchasePrice * quantity
+            cur.execute("""
+                INSERT INTO Ordenes (fecha, precio, cantidad_compra, id_proveedor, id_producto)
+                VALUES (NOW(), %s, %s, %s, %s)
+            """, (totalPrice, quantity, supplierId, productId))
+
+            conn.commit()
+            print(f"✅ Entrada registrada: +{quantity} unidades de producto {productId}")
+            return True
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ Error en entrada de stock: {e}")
+            return False
+        finally:
+            conn.autocommit = True
+            cur.close()
+            dbInstance.disconnect(conn)

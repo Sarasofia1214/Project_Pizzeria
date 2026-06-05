@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""
+Aplicación principal de consola para el sistema de gestión CampusBike.
+Los textos mostrados al usuario están en español.
+Los nombres de funciones/variables permanecen en inglés.
+"""
+
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -6,197 +12,199 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.services.cliente_service import ClienteService
 from src.services.producto_service import ProductoService
 from src.services.pedido_service import PedidoService
-from src.config.database import db_instance
+from src.config.database import dbInstance
 
-def menu_principal():
+def mainMenu():
+    """Muestra el menú principal en español."""
     print("\n" + "="*50)
-    print("🍕 PIZZERÍA - SISTEMA DE GESTIÓN")
+    print("🚲 CAMPUSBIKE - SISTEMA DE GESTIÓN")
     print("="*50)
-    print("1. 👤 Clientes")
-    print("2. 🍕 Productos")
-    print("3. 🛒 Pedidos")
+    print("1. 👥 Clientes")
+    print("2. 🚲 Productos")
+    print("3. 📦 Pedidos")
     print("0. 🚪 Salir")
 
-def menu_clientes():
+def customerMenu():
+    """Submenú de gestión de clientes."""
     while True:
         print("\n--- CLIENTES ---")
         print("1. Crear cliente")
-        print("2. Listar clientes")
+        print("2. Listar todos los clientes")
         print("3. Actualizar cliente")
         print("4. Eliminar cliente")
         print("0. Volver")
-        op = input("Opción: ")
+        opt = input("Opción: ")
 
-        if op == '1':
-            nombre = input("Nombre: ")
-            direccion = input("Dirección: ")
-            telefono = input("Teléfono: ")
-            ClienteService.crear_cliente(nombre, direccion, int(telefono) if telefono else None)
-        elif op == '2':
-            clientes = ClienteService.listar_clientes()
-            if not clientes:
-                print("No hay clientes.")
+        if opt == '1':
+            name = input("Nombre: ")
+            address = input("Dirección: ")
+            phone = input("Teléfono: ")
+            balance = input("Saldo inicial (opcional): ")
+            balance = float(balance) if balance else 0.0
+            ClienteService.createCustomer(name, address, phone, balance)
+
+        elif opt == '2':
+            customers = ClienteService.getAllCustomers()
+            if not customers:
+                print("No hay clientes registrados.")
             else:
-                for c in clientes:
-                    print(f"ID:{c[0]} | {c[1]} | {c[2]} | {c[3]}")
-        elif op == '3':
+                print(f"{'ID':<5} {'Nombre':<20} {'Dirección':<20} {'Teléfono':<15} {'Saldo':<10}")
+                print("-"*70)
+                for c in customers:
+                    print(f"{c[0]:<5} {c[1]:<20} {c[2] or '':<20} {c[3] or '':<15} ${c[4]:<10.2f}")
+
+        elif opt == '3':
             cid = int(input("ID del cliente: "))
-            nombre = input("Nuevo nombre (Enter = no cambio): ")
-            direccion = input("Nueva dirección: ")
-            telefono = input("Nuevo teléfono: ")
-            ClienteService.actualizar_cliente(
+            name = input("Nuevo nombre (vacío para omitir): ")
+            address = input("Nueva dirección: ")
+            phone = input("Nuevo teléfono: ")
+            balance = input("Nuevo saldo: ")
+            balance = float(balance) if balance else None
+            ClienteService.updateCustomer(
                 cid,
-                nombre if nombre else None,
-                direccion if direccion else None,
-                int(telefono) if telefono else None
+                nombre=name if name else None,
+                direccion=address if address else None,
+                telefono=phone if phone else None,
+                saldoActual=balance
             )
-            print("✅ Actualizado (si existía)")
-        elif op == '4':
+            print("Actualización intentada (si el ID existe).")
+
+        elif opt == '4':
             cid = int(input("ID del cliente a eliminar: "))
-            if ClienteService.eliminar_cliente(cid):
-                print("✅ Eliminado")
+            if ClienteService.deleteCustomer(cid):
+                print("✅ Cliente eliminado.")
             else:
-                print("❌ No se pudo eliminar (puede tener pedidos asociados)")
-        elif op == '0':
+                print("❌ No se pudo eliminar (quizás tiene pedidos asociados).")
+        elif opt == '0':
             break
 
-def menu_productos():
+def productMenu():
+    """Submenú de gestión de productos."""
     while True:
         print("\n--- PRODUCTOS ---")
         print("1. Listar productos")
-        print("2. Cambiar precio a un producto")
+        print("2. Actualizar precio de producto")
+        print("3. Actualizar stock de producto")
         print("0. Volver")
-        op = input("Opción: ")
+        opt = input("Opción: ")
 
-        if op == '1':
-            prods = ProductoService.listar_productos()
-            if not prods:
-                print("No hay productos.")
+        if opt == '1':
+            products = ProductoService.getAllProducts()
+            if not products:
+                print("No hay productos registrados.")
             else:
-                print(f"{'ID':<4} {'Pizza':<20} {'Panzerotti':<15} {'Bebida':<15} {'Postre':<15} {'Precio':<8}")
-                for p in prods:
-                    print(f"{p[0]:<4} {p[1] or '':<20} {p[2] or '':<15} {p[3] or '':<15} {p[4] or '':<15} ${p[5]:<8.2f}")
-        elif op == '2':
+                print(f"{'ID':<5} {'Tipo':<25} {'Stock':<8} {'Precio':<10} {'Detalles'}")
+                print("-"*70)
+                for p in products:
+                    print(f"{p[0]:<5} {p[1]:<25} {p[2]:<8} ${p[3]:<10.2f} {p[4] or ''}")
+        elif opt == '2':
             pid = int(input("ID del producto: "))
-            nuevo_precio = float(input("Nuevo precio: "))
-            if ProductoService.actualizar_precio(pid, nuevo_precio):
-                print("✅ Precio actualizado")
+            newPrice = float(input("Nuevo precio: "))
+            if ProductoService.updateProductPrice(pid, newPrice):
+                print("✅ Precio actualizado.")
             else:
-                print("❌ Producto no encontrado")
-        elif op == '0':
+                print("❌ Producto no encontrado.")
+        elif opt == '3':
+            pid = int(input("ID del producto: "))
+            newStock = int(input("Nueva cantidad en stock: "))
+            if ProductoService.updateProductStock(pid, newStock):
+                print("✅ Stock actualizado.")
+            else:
+                print("❌ Producto no encontrado.")
+        elif opt == '0':
             break
 
-def menu_pedidos():
+def orderMenu():
+    """Submenú de gestión de pedidos (incluye transacción)."""
     while True:
         print("\n--- PEDIDOS ---")
         print("1. Crear nuevo pedido")
-        print("2. Listar pedidos")
-        print("3. Ver detalle de un pedido")
-        print("4. Cambiar estado de un pedido")
+        print("2. Listar todos los pedidos")
+        print("3. Ver detalles de un pedido")
         print("0. Volver")
-        op = input("Opción: ")
+        opt = input("Opción: ")
 
-        if op == '1':
-            clientes = ClienteService.listar_clientes()
-            if not clientes:
-                print("❌ No hay clientes. Cree uno primero.")
+        if opt == '1':
+            # Mostrar clientes
+            customers = ClienteService.getAllCustomers()
+            if not customers:
+                print("❌ No hay clientes. Por favor cree un cliente primero.")
                 continue
             print("Clientes disponibles:")
-            for c in clientes:
-                print(f"ID: {c[0]} - {c[1]}")
-            cliente_id = int(input("ID del cliente: "))
+            for c in customers:
+                print(f"ID:{c[0]} - {c[1]}")
+            custId = int(input("ID del cliente: "))
 
-            print("Tipo de pedido: 1=En tienda, 2=Para llevar")
-            tipo_op = input("Opción: ")
-            tipo = 'tienda' if tipo_op == '1' else 'fuera'
-            mesa = None
-            if tipo == 'tienda':
-                mesa = int(input("Número de mesa: "))
-
-            productos = ProductoService.listar_productos()
-            if not productos:
-                print("❌ No hay productos registrados.")
+            # Mostrar productos
+            products = ProductoService.getAllProducts()
+            if not products:
+                print("❌ No hay productos disponibles.")
                 continue
             print("\nProductos disponibles:")
-            for p in productos:
-                print(f"ID: {p[0]} - {p[1] or p[2] or p[3] or p[4]} - ${p[5]:.2f}")
+            for p in products:
+                print(f"ID:{p[0]} | {p[1]} | Stock:{p[2]} | Precio:${p[3]}")
+            prodId = int(input("ID del producto: "))
+            quantity = int(input("Cantidad: "))
+            color = input("Color (opcional): ") or None
+            size = input("Tamaño (opcional): ") or None
+            customName = input("Nombre del pedido (opcional): ") or None
 
-            items = []
-            while True:
-                prod_id = input("ID producto (0 para terminar): ")
-                if prod_id == '0':
-                    break
-                prod_id = int(prod_id)
-                prod = ProductoService.obtener_producto(prod_id)
-                if not prod:
-                    print("Producto no existe")
-                    continue
-                cant = int(input("Cantidad: "))
-                items.append({'producto_id': prod_id, 'cantidad': cant})
-
-            if items:
-                resultado = PedidoService.crear_pedido(cliente_id, tipo, items, mesa)
-                if resultado:
-                    print(f"✅ Pedido #{resultado['pedido_id']} registrado. Total: ${resultado['total']:.2f}")
+            result = PedidoService.createOrder(custId, prodId, quantity, color, size, customName)
+            if result:
+                print(f"✅ Pedido #{result['orderId']} creado. Total: ${result['total']:.2f}")
             else:
-                print("No se agregaron productos.")
+                print("❌ No se pudo completar el pedido.")
 
-        elif op == '2':
-            pedidos = PedidoService.listar_pedidos()
-            if not pedidos:
-                print("No hay pedidos.")
+        elif opt == '2':
+            orders = PedidoService.getAllOrders()
+            if not orders:
+                print("No hay pedidos registrados.")
             else:
-                print(f"{'ID':<5} {'Cliente':<20} {'Fecha':<25} {'Total':<10} {'Estado'}")
-                for p in pedidos:
-                    print(f"{p[0]:<5} {p[1]:<20} {p[2]:<25} ${p[3]:<10.2f} {p[4]}")
-        elif op == '3':
-            pid = int(input("ID del pedido: "))
-            detalle = PedidoService.obtener_pedido_completo(pid)
-            if detalle:
-                print(f"\nPedido #{detalle['id']}")
-                print(f"Cliente: {detalle['cliente']}")
-                print(f"Fecha: {detalle['fecha']}")
-                print(f"Estado: {detalle['estado']}")
-                print("Productos:")
-                for d in detalle['detalles']:
-                    print(f"  {d['cantidad']} x {d['producto']} - ${d['precio']:.2f} c/u")
-                print(f"Total: ${detalle['total']:.2f}")
+                print(f"{'ID':<6} {'Cliente':<20} {'Nombre Pedido':<20} {'Total':<10} {'Fecha'}")
+                print("-"*70)
+                for o in orders:
+                    print(f"{o[0]:<6} {o[1] or 'N/A':<20} {o[2] or '':<20} ${o[3]:<10.2f} {o[4]}")
+        elif opt == '3':
+            oid = int(input("ID del pedido: "))
+            details = PedidoService.getOrderDetails(oid)
+            if details:
+                print(f"\nPedido #{details['id']}")
+                print(f"Cliente: {details['cliente']}")
+                print(f"Nombre: {details['nombre']}")
+                print(f"Descripción: {details['descripcion']}")
+                print(f"Color: {details['color']}, Tamaño: {details['tamano']}")
+                print(f"Total: ${details['precio']:.2f}")
+                print(f"Fecha: {details['fecha']}")
             else:
                 print("Pedido no encontrado.")
-        elif op == '4':
-            pid = int(input("ID del pedido: "))
-            print("Estados posibles: pendiente, pagado, cancelado")
-            nuevo_estado = input("Nuevo estado: ")
-            if PedidoService.actualizar_estado(pid, nuevo_estado):
-                print("✅ Estado actualizado")
-            else:
-                print("❌ No se pudo actualizar")
-        elif op == '0':
+        elif opt == '0':
             break
 
 def main():
+    """Función principal: prueba conexión y lanza el menú."""
+    # Probar conexión a la base de datos
     try:
-        conn = db_instance.connect()
-        db_instance.disconnect(conn)
-        print("✅ Conectado a PostgreSQL")
+        conn = dbInstance.connect()
+        dbInstance.disconnect(conn)
+        print("✅ Conectado a la base de datos CampusBike")
     except Exception as e:
-        print(f"❌ No se pudo conectar: {e}")
+        print(f"❌ Error de conexión: {e}")
         return
 
     while True:
-        menu_principal()
-        opcion = input("Seleccione: ")
-        if opcion == '1':
-            menu_clientes()
-        elif opcion == '2':
-            menu_productos()
-        elif opcion == '3':
-            menu_pedidos()
-        elif opcion == '0':
-            print("👋 Hasta luego")
+        mainMenu()
+        choice = input("Seleccione: ")
+        if choice == '1':
+            customerMenu()
+        elif choice == '2':
+            productMenu()
+        elif choice == '3':
+            orderMenu()
+        elif choice == '0':
+            print("👋 ¡Hasta luego!")
             break
         else:
-            print("Opción no válida")
+            print("Opción no válida.")
 
 if __name__ == "__main__":
     main()

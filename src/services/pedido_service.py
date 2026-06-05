@@ -1,133 +1,131 @@
-from src.config.database import db_instance
+"""
+Servicio para Pedido (órdenes de clientes).
+Incluye transacción para insertar pedido y actualizar inventario.
+"""
+
 from datetime import datetime
+from src.config.database import dbInstance
 
 class PedidoService:
+    """Maneja la creación y consulta de pedidos con soporte transaccional."""
+
     @staticmethod
-    def crear_pedido(cliente_id, tipo, items, mesa=None):
+    def createOrder(customerId, productId, quantity, color=None, size=None, customName=None):
         """
-        tipo: 'tienda' o 'fuera'
-        items: lista de {'producto_id': int, 'cantidad': int}
+        Crea un nuevo pedido para un cliente.
+        Es una transacción: inserta en Pedido y actualiza stock de Productos.
+        Retorna el ID del pedido y el total, o None en caso de error.
         """
-        conn = db_instance.connect()
+        conn = dbInstance.connect()
         cur = conn.cursor()
         try:
+            # Iniciar transacción
             conn.autocommit = False
 
-            if tipo == 'tienda':
-                cur.execute(
-                    "INSERT INTO consumir_tienda (mesa) VALUES (%s) RETURNING id_consumir_tienda",
-                    (mesa,)
-                )
-                consumo_tienda_id = cur.fetchone()[0]
-                consumo_fuera_id = None
-            else:
-                cur.execute(
-                    "INSERT INTO consumir_fuera (hora_pedido) VALUES (%s) RETURNING id_consumir_fuera",
-                    (datetime.now(),)
-                )
-                consumo_tienda_id = None
-                consumo_fuera_id = cur.fetchone()[0]
+            # 1. Obtener detalles del producto y verificar stock
+            cur.execute("""
+                SELECT cantidad_producto, precio_unitario
+                FROM Productos
+                WHERE id_producto = %s
+                FOR UPDATE
+            """, (productId,))
+            row = cur.fetchone()
+            if not row:
+                raise Exception("Producto no encontrado")
+            currentStock, unitPrice = row
+            if currentStock < quantity:
+                raise Exception(f"Stock insuficiente. Disponible: {currentStock}")
+
+            # 2. Calcular precio total
+            totalPrice = unitPrice * quantity
+
+            # 3. Insertar en la tabla Pedido (generar id_pedido manualmente)
+            cur.execute("SELECT COALESCE(MAX(id_pedido), 0) + 1 FROM Pedido")
+            newOrderId = cur.fetchone()[0]
 
             cur.execute("""
-                INSERT INTO Pedidos (cliente, consumir_tienda, consumir_fuera, fecha, valor)
-                VALUES (%s, %s, %s, %s, 0)
-                RETURNING id_pedido
-            """, (cliente_id, consumo_tienda_id, consumo_fuera_id, datetime.now()))
-            pedido_id = cur.fetchone()[0]
+                INSERT INTO Pedido (id_pedido, nombre, descripcion, precio, color, tamano, id_inventario)
+                VALUES (%s, %s, %s, %s, %s, %s, NULL)
+            """, (newOrderId, customName or f"Pedido {newOrderId}", f"Pedido del producto {productId}", totalPrice, color, size))
 
-            total = 0
-            for item in items:
-                cur.execute("SELECT precio_unitario FROM Productos WHERE id_menu = %s", (item['producto_id'],))
-                precio = cur.fetchone()
-                if not precio:
-                    raise Exception(f"Producto {item['producto_id']} no encontrado")
-                precio = precio[0]
-                subtotal = precio * item['cantidad']
-                total += subtotal
+            # 4. Actualizar stock del producto
+            newStock = currentStock - quantity
+            cur.execute("UPDATE Productos SET cantidad_producto = %s WHERE id_producto = %s",
+                        (newStock, productId))
 
-                cur.execute("""
-                    INSERT INTO DetallePedido (pedido_id, producto_id, cantidad, precio_unitario)
-                    VALUES (%s, %s, %s, %s)
-                """, (pedido_id, item['producto_id'], item['cantidad'], precio))
+            # 5. Registrar en Tienda (tabla puente)
+            cur.execute("""
+                INSERT INTO Tienda (id_pedido, id_cliente, destino, id_inventario)
+                VALUES (%s, %s, %s, NULL)
+            """, (newOrderId, customerId, "En línea"))
 
-            cur.execute("UPDATE Pedidos SET valor = %s WHERE id_pedido = %s", (total, pedido_id))
+            # 6. Registrar en Historial_venta
+            cur.execute("SELECT COALESCE(MAX(id_venta), 0) + 1 FROM Historial_venta")
+            newSaleId = cur.fetchone()[0]
+            cur.execute("INSERT INTO Historial_venta (id_venta, id_pedido) VALUES (%s, %s)",
+                        (newSaleId, newOrderId))
 
+            # 7. Confirmar transacción
             conn.commit()
-            print(f"✅ Pedido #{pedido_id} creado. Total: ${total:.2f}")
-            return {'pedido_id': pedido_id, 'total': total}
+            print(f"✅ Pedido #{newOrderId} creado exitosamente. Total: ${totalPrice:.2f}")
+            return {'orderId': newOrderId, 'total': totalPrice}
 
         except Exception as e:
             conn.rollback()
-            print(f"❌ Error al crear pedido: {e}")
+            print(f"❌ Falló la creación del pedido: {e}")
             return None
         finally:
             conn.autocommit = True
             cur.close()
-            db_instance.disconnect(conn)
+            dbInstance.disconnect(conn)
 
     @staticmethod
-    def listar_pedidos():
-        conn = db_instance.connect()
+    def getAllOrders():
+        """Retorna lista de todos los pedidos con nombre del cliente."""
+        conn = dbInstance.connect()
         cur = conn.cursor()
         try:
             cur.execute("""
-                SELECT p.id_pedido, c.nombre, p.fecha, p.valor, p.estado
-                FROM Pedidos p
-                JOIN Cliente c ON p.cliente = c.id_cliente
+                SELECT p.id_pedido, c.nombre AS cliente, p.nombre, p.precio, p.fecha
+                FROM Pedido p
+                LEFT JOIN Tienda t ON p.id_pedido = t.id_pedido
+                LEFT JOIN Cliente c ON t.id_cliente = c.id_cliente
                 ORDER BY p.id_pedido DESC
             """)
             return cur.fetchall()
         finally:
             cur.close()
-            db_instance.disconnect(conn)
+            dbInstance.disconnect(conn)
 
     @staticmethod
-    def obtener_pedido_completo(pedido_id):
-        conn = db_instance.connect()
+    def getOrderDetails(orderId):
+        """Retorna detalles completos de un pedido específico."""
+        conn = dbInstance.connect()
         cur = conn.cursor()
         try:
+            # Cabecera del pedido
             cur.execute("""
-                SELECT p.id_pedido, c.nombre, p.fecha, p.valor, p.estado
-                FROM Pedidos p
-                JOIN Cliente c ON p.cliente = c.id_cliente
+                SELECT p.id_pedido, p.nombre, p.descripcion, p.precio, p.color, p.tamano, p.fecha,
+                       c.nombre AS cliente
+                FROM Pedido p
+                LEFT JOIN Tienda t ON p.id_pedido = t.id_pedido
+                LEFT JOIN Cliente c ON t.id_cliente = c.id_cliente
                 WHERE p.id_pedido = %s
-            """, (pedido_id,))
-            pedido = cur.fetchone()
-            if not pedido:
+            """, (orderId,))
+            order = cur.fetchone()
+            if not order:
                 return None
 
-            cur.execute("""
-                SELECT prod.pizzas, dp.cantidad, dp.precio_unitario
-                FROM DetallePedido dp
-                JOIN Productos prod ON dp.producto_id = prod.id_menu
-                WHERE dp.pedido_id = %s
-            """, (pedido_id,))
-            detalles = cur.fetchall()
-
             return {
-                'id': pedido[0],
-                'cliente': pedido[1],
-                'fecha': pedido[2],
-                'total': float(pedido[3]),
-                'estado': pedido[4],
-                'detalles': [{'producto': d[0], 'cantidad': d[1], 'precio': float(d[2])} for d in detalles]
+                'id': order[0],
+                'nombre': order[1],
+                'descripcion': order[2],
+                'precio': float(order[3]),
+                'color': order[4],
+                'tamano': order[5],
+                'fecha': order[6],
+                'cliente': order[7]
             }
         finally:
             cur.close()
-            db_instance.disconnect(conn)
-
-    @staticmethod
-    def actualizar_estado(pedido_id, nuevo_estado):
-        conn = db_instance.connect()
-        cur = conn.cursor()
-        try:
-            cur.execute("UPDATE Pedidos SET estado = %s WHERE id_pedido = %s", (nuevo_estado, pedido_id))
-            conn.commit()
-            return cur.rowcount > 0
-        except Exception as e:
-            conn.rollback()
-            print(f"Error: {e}")
-            return False
-        finally:
-            cur.close()
-            db_instance.disconnect(conn)
+            dbInstance.disconnect(conn)
